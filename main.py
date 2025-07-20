@@ -6,9 +6,15 @@ from pathlib import Path
 from datetime import datetime
 from openai import OpenAI
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = "github.com/Justmalhar/content-machine.git"
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -64,6 +70,12 @@ def call_openai(system_prompt, user_input, schema):
     )
     return response.output_parsed
 
+def set_git_remote():
+    if GITHUB_TOKEN:
+        new_url = f"https://{GITHUB_TOKEN}@{GITHUB_REPO}"
+        subprocess.run(["git", "remote", "set-url", "origin", new_url], check=True)
+        print("✅ Git remote updated for token authentication")
+
 # Generation functions
 def generate_blog(title):
     return call_openai(read_prompt("blog.md"), f"Write a long-form blog post about: {title}", BlogPost)
@@ -100,7 +112,7 @@ def save_tasks(tasks):
     with open(TASKS_FILE, "w") as f:
         json.dump(tasks, f, indent=2)
 
-# GitHub integration
+# GitHub operations
 def git_pull_latest():
     try:
         subprocess.run(["git", "fetch", "--all"], check=True)
@@ -147,6 +159,7 @@ def run_pipeline(title):
     print(f"✅ Completed all formats for: {title}")
 
 def process_next():
+    set_git_remote()
     git_pull_latest()
     tasks = load_tasks()
     for t in tasks:
