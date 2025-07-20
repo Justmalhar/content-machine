@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import List
@@ -15,15 +14,13 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# API Keys & IDs
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 
-# Initialize OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Notion API
+# Notion API Setup
 NOTION_BASE_URL = "https://api.notion.com/v1"
 HEADERS = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -85,17 +82,19 @@ def save_output(folder, title, content):
     path.write_text(content, encoding="utf-8")
     print(f"✅ Saved {folder}: {path}")
 
-# ✅ Notion Functions
+# ✅ Fetch tasks from Notion
 def fetch_notion_tasks():
     url = f"{NOTION_BASE_URL}/databases/{NOTION_DATABASE_ID}/query"
     payload = {
         "filter": {
             "property": "Status",
-            "select": {"equals": "Not started"}
+            "select": { "equals": "Not started" }
         }
     }
     r = requests.post(url, headers=HEADERS, json=payload)
-    r.raise_for_status()
+    if r.status_code != 200:
+        print("❌ Notion API Error:", r.status_code, r.text)
+        r.raise_for_status()
     data = r.json()
     tasks = []
     for result in data.get("results", []):
@@ -127,7 +126,10 @@ def add_content_to_notion(page_id, section_title, content):
             }
         }
     ]
-    requests.patch(url, headers=HEADERS, json={"children": blocks})
+    r = requests.patch(url, headers=HEADERS, json={"children": blocks})
+    if r.status_code != 200:
+        print(f"⚠️ Failed to add content to Notion: {section_title}")
+        print(r.text)
 
 # ✅ Content Generators
 def generate_blog(title):
@@ -151,12 +153,13 @@ def generate_substack(blog_content):
 def generate_youtube(blog_content):
     return call_openai(read_prompt("youtube_script.md"), f"Convert this blog into a YouTube video script:\n{blog_content}", SocialPost)
 
-# ✅ Main Pipeline
+# ✅ Pipeline
 def run_pipeline(task):
     title = task["title"]
     page_id = task["page_id"]
     print(f"🚀 Generating content for: {title}")
 
+    # Blog first
     blog = generate_blog(title)
     save_output("blog", title, blog.content)
     add_content_to_notion(page_id, "Blog Post", blog.content)
@@ -195,8 +198,8 @@ def run_pipeline(task):
         save_output("youtube_script", title, content)
         add_content_to_notion(page_id, "YouTube Script", content)
 
+    # Parallel execution
     jobs = [linkedin_job, medium_job, twitter_job, instagram_job, substack_job, youtube_job]
-
     with ThreadPoolExecutor(max_workers=6) as executor:
         [executor.submit(job) for job in jobs]
 
@@ -207,9 +210,8 @@ def run_pipeline(task):
 def process_all():
     tasks = fetch_notion_tasks()
     if not tasks:
-        print("✅ No pending tasks found in Notion")
+        print("✅ No pending tasks in Notion.")
         return
-
     for task in tasks:
         run_pipeline(task)
 
