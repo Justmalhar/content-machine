@@ -7,7 +7,7 @@ from datetime import datetime
 from openai import OpenAI
 from pydantic import BaseModel
 from dotenv import load_dotenv
-
+from typing import List
 # Load environment variables
 load_dotenv()
 
@@ -44,10 +44,10 @@ class SocialPost(BaseModel):
     content: str
 
 class TwitterThread(BaseModel):
-    tweets: list[str]
+    tweets: List[str]
 
 class InstagramCarousel(BaseModel):
-    slides: list[str]
+    slides: List[str]
 
 # Helpers
 def read_prompt(name):
