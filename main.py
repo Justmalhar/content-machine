@@ -8,6 +8,8 @@ from openai import OpenAI
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
+
 # Load environment variables
 load_dotenv()
 
@@ -131,36 +133,58 @@ def git_commit_and_push():
     except subprocess.CalledProcessError as e:
         print(f"❌ Git push failed: {e}")
 
-# Pipeline DAG
-def run_pipeline(title):
+# Checkpoint system
+def mark_checkpoint(task, step):
+    checkpoint_file = BASE_DIR / "checkpoint.json"
+    with open(checkpoint_file, "w") as f:
+        json.dump({"title": task["title"], "step": step}, f)
+    print(f"✅ Checkpoint saved: {task['title']} -> {step}")
+
+def clear_checkpoint():
+    checkpoint_file = BASE_DIR / "checkpoint.json"
+    if checkpoint_file.exists():
+        checkpoint_file.unlink()
+
+# Pipeline DAG with parallelization
+def run_pipeline(task):
+    title = task["title"]
     print(f"🚀 Generating content for: {title}")
 
     blog = generate_blog(title)
     save_output("blog", title, blog.content)
+    mark_checkpoint(task, "blog")
 
-    linkedin = generate_linkedin(blog.content)
-    save_output("linkedin_article", title, linkedin.content)
+    def linkedin_job():
+        save_output("linkedin_article", title, generate_linkedin(blog.content).content)
 
-    medium = generate_medium(blog.content)
-    save_output("medium_article", title, medium.content)
+    def medium_job():
+        save_output("medium_article", title, generate_medium(blog.content).content)
 
-    twitter = generate_twitter(blog.content)
+    def twitter_job():
+        twitter = generate_twitter(blog.content)
+        formatted_tweets = [f"### Tweet {i+1}\n\n{tweet}\n" for i, tweet in enumerate(twitter.tweets)]
+        save_output("twitter_thread", title, "\n".join(formatted_tweets))
 
-    formatted_tweets = []
-    for i, tweet in enumerate(twitter.tweets, start=1):
-        formatted_tweets.append(f"### Tweet {i}\n\n{tweet}\n")
+    def instagram_job():
+        instagram = generate_instagram(blog.content)
+        formatted_slides = [f"### Slide {i+1}\n\n{slide}\n" for i, slide in enumerate(instagram.slides)]
+        save_output("instagram_carousel", title, "\n".join(formatted_slides))
 
-    save_output("twitter_thread", title, "\n".join(formatted_tweets))
+    def substack_job():
+        save_output("substack_newsletter", title, generate_substack(blog.content).content)
 
-    instagram = generate_instagram(blog.content)
-    save_output("instagram_carousel", title, "\n---\n".join(instagram.slides))
+    def youtube_job():
+        save_output("youtube_script", title, generate_youtube(blog.content).content)
 
-    substack = generate_substack(blog.content)
-    save_output("substack_newsletter", title, substack.content)
+    jobs = [linkedin_job, medium_job, twitter_job, instagram_job, substack_job, youtube_job]
 
-    youtube = generate_youtube(blog.content)
-    save_output("youtube_script", title, youtube.content)
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = [executor.submit(job) for job in jobs]
+        for i, future in enumerate(futures, start=1):
+            future.result()
+            mark_checkpoint(task, f"step_{i}")
 
+    clear_checkpoint()
     print(f"✅ Completed all formats for: {title}")
 
 def process_all():
@@ -172,7 +196,7 @@ def process_all():
     for t in tasks:
         if t["status"] == "todo":
             print(f"🚀 Processing: {t['title']}")
-            run_pipeline(t["title"])
+            run_pipeline(t)
             t["status"] = "done"
             any_processed = True
 
