@@ -158,18 +158,25 @@ def run_pipeline(title):
 
     print(f"✅ Completed all formats for: {title}")
 
-def process_next():
+def process_all():
     set_git_remote()
     git_pull_latest()
     tasks = load_tasks()
+
+    any_processed = False
     for t in tasks:
         if t["status"] == "todo":
+            print(f"🚀 Processing: {t['title']}")
             run_pipeline(t["title"])
             t["status"] = "done"
-            save_tasks(tasks)
-            git_commit_and_push()
-            return
-    print("✅ No pending tasks")
+            any_processed = True
+
+    if any_processed:
+        save_tasks(tasks)
+        git_commit_and_push()
+        print("✅ All pending tasks processed and pushed to GitHub")
+    else:
+        print("✅ No pending tasks found")
 
 if __name__ == "__main__":
-    process_next()
+    process_all()
