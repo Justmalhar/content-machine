@@ -145,7 +145,12 @@ def run_pipeline(title):
     save_output("medium_article", title, medium.content)
 
     twitter = generate_twitter(blog.content)
-    save_output("twitter_thread", title, "\n".join(twitter.tweets))
+
+    formatted_tweets = []
+    for i, tweet in enumerate(twitter.tweets, start=1):
+        formatted_tweets.append(f"### Tweet {i}\n\n{tweet}\n")
+
+    save_output("twitter_thread", title, "\n".join(formatted_tweets))
 
     instagram = generate_instagram(blog.content)
     save_output("instagram_carousel", title, "\n---\n".join(instagram.slides))
