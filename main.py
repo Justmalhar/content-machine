@@ -123,15 +123,15 @@ def git_pull_latest():
     except subprocess.CalledProcessError as e:
         print(f"❌ Git pull failed: {e}")
 
-def git_commit_and_push():
+def git_commit_and_push_task(title):
     try:
         subprocess.run(["git", "add", "."], check=True)
-        commit_msg = f"Auto-update content {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        commit_msg = f"Add generated content for task: {title} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
         subprocess.run(["git", "push", "origin", "main"], check=True)
-        print("✅ Changes pushed to GitHub")
+        print(f"✅ Changes for '{title}' pushed to GitHub")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Git push failed: {e}")
+        print(f"❌ Git push failed for '{title}': {e}")
 
 # Checkpoint system
 def mark_checkpoint(task, step):
@@ -187,25 +187,22 @@ def run_pipeline(task):
     clear_checkpoint()
     print(f"✅ Completed all formats for: {title}")
 
+# Process all tasks and commit after each one
 def process_all():
     set_git_remote()
     git_pull_latest()
     tasks = load_tasks()
 
-    any_processed = False
     for t in tasks:
         if t["status"] == "todo":
             print(f"🚀 Processing: {t['title']}")
             run_pipeline(t)
             t["status"] = "done"
-            any_processed = True
+            save_tasks(tasks)  # Save updated status immediately
+            git_commit_and_push_task(t["title"])  # Commit and push for this task
+            print(f"✅ Task '{t['title']}' processed and pushed to GitHub")
 
-    if any_processed:
-        save_tasks(tasks)
-        git_commit_and_push()
-        print("✅ All pending tasks processed and pushed to GitHub")
-    else:
-        print("✅ No pending tasks found")
+    print("✅ All tasks processed")
 
 if __name__ == "__main__":
     process_all()
