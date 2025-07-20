@@ -16,7 +16,7 @@ PROMPTS_DIR = BASE_DIR / "prompts"
 OUTPUT_DIR = BASE_DIR / "outputs"
 TASKS_FILE = BASE_DIR / "tasks.json"
 
-# Create folders if they don't exist
+# Ensure folders exist
 formats = [
     "blog",
     "linkedin_article",
@@ -86,14 +86,12 @@ def generate_substack(blog_content):
 def generate_youtube(blog_content):
     return call_openai(read_prompt("youtube_script.md"), f"Convert this blog into a YouTube video script:\n{blog_content}", SocialPost)
 
-# Save outputs
 def save_output(folder, title, content):
     filename = f"{timestamp_prefix()}-{slugify(title)}.md"
     path = OUTPUT_DIR / folder / filename
     path.write_text(content, encoding="utf-8")
     print(f"✅ Saved {folder}: {path}")
 
-# Load & save tasks
 def load_tasks():
     with open(TASKS_FILE, "r") as f:
         return json.load(f)
@@ -103,6 +101,14 @@ def save_tasks(tasks):
         json.dump(tasks, f, indent=2)
 
 # GitHub integration
+def git_pull_latest():
+    try:
+        subprocess.run(["git", "fetch", "--all"], check=True)
+        subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
+        print("✅ Pulled latest changes from GitHub")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Git pull failed: {e}")
+
 def git_commit_and_push():
     try:
         subprocess.run(["git", "add", "."], check=True)
@@ -111,7 +117,7 @@ def git_commit_and_push():
         subprocess.run(["git", "push", "origin", "main"], check=True)
         print("✅ Changes pushed to GitHub")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Git operation failed: {e}")
+        print(f"❌ Git push failed: {e}")
 
 # Pipeline DAG
 def run_pipeline(title):
@@ -140,8 +146,8 @@ def run_pipeline(title):
 
     print(f"✅ Completed all formats for: {title}")
 
-# Process next task
 def process_next():
+    git_pull_latest()
     tasks = load_tasks()
     for t in tasks:
         if t["status"] == "todo":
